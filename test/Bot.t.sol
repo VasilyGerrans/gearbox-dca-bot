@@ -4,17 +4,12 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {EXTERNAL_CALLS_PERMISSION} from "@gearbox-protocol/core-v3/contracts/interfaces/ICreditFacadeV3.sol";
-import {
-    Bot, 
-    ICreditFacadeV3, 
-    MultiCall, 
-    IERC20,
-    SigUtils
-} from "../src/Bot.sol";
+import {Bot, ICreditFacadeV3, MultiCall, IERC20, SigUtils} from "../src/Bot.sol";
 
 contract TestBot is Test {
     address constant USDC_WHALE = 0x4B16c5dE96EB2117bBE5fd171E4d203624B014aa;
-    address constant RANDOM_ADDRESS = address(uint160(uint256(bytes32(keccak256("RANDOM_ADDRESS")))));
+    address constant RANDOM_ADDRESS =
+        address(uint160(uint256(bytes32(keccak256("RANDOM_ADDRESS")))));
     uint256 constant TEST_AMOUNT = 1000000000;
     uint256 constant INITIAL_BALANCE = 10 * TEST_AMOUNT;
     uint256 constant FIVE_MINUTES = 5 * 60;
@@ -41,14 +36,18 @@ contract TestBot is Test {
 
         IERC20(TOKEN_IN).transfer(address(this), INITIAL_BALANCE);
         uint256 balance = IERC20(TOKEN_IN).balanceOf(address(this));
-        assertEq(balance, INITIAL_BALANCE); 
+        assertEq(balance, INITIAL_BALANCE);
 
         vm.stopPrank();
 
         bot = new Bot();
 
         MultiCall[] memory emptyCalls;
-        testCreditAccount = bot.CREDIT_FACADE().openCreditAccount(address(this), emptyCalls, 0);
+        testCreditAccount = bot.CREDIT_FACADE().openCreditAccount(
+            address(this),
+            emptyCalls,
+            0
+        );
     }
 
     function test_revertNonexistentOrders() public {
@@ -85,7 +84,10 @@ contract TestBot is Test {
         );
 
         IERC20(TOKEN_IN).approve(address(bot), 3 * TEST_AMOUNT);
-        assertEq(IERC20(TOKEN_IN).allowance(address(this), address(bot)), 3 * TEST_AMOUNT);
+        assertEq(
+            IERC20(TOKEN_IN).allowance(address(this), address(bot)),
+            3 * TEST_AMOUNT
+        );
 
         vm.expectRevert();
         bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
@@ -93,7 +95,10 @@ contract TestBot is Test {
 
     function test_submitOrder() public {
         IERC20(TOKEN_IN).approve(address(bot), 3 * TEST_AMOUNT);
-        assertEq(IERC20(TOKEN_IN).allowance(address(this), address(bot)), 3 * TEST_AMOUNT);
+        assertEq(
+            IERC20(TOKEN_IN).allowance(address(this), address(bot)),
+            3 * TEST_AMOUNT
+        );
 
         bot.CREDIT_FACADE().setBotPermissions(
             testCreditAccount,
@@ -102,9 +107,15 @@ contract TestBot is Test {
         );
 
         uint256 ownerTokenInBefore = IERC20(TOKEN_IN).balanceOf(address(this));
-        uint256 ownerTokenOutBefore = IERC20(TOKEN_OUT).balanceOf(address(this));
-        uint256 caTokenInBefore = IERC20(TOKEN_IN).balanceOf(address(testCreditAccount));
-        uint256 caTokenOutBefore = IERC20(TOKEN_OUT).balanceOf(address(testCreditAccount));
+        uint256 ownerTokenOutBefore = IERC20(TOKEN_OUT).balanceOf(
+            address(this)
+        );
+        uint256 caTokenInBefore = IERC20(TOKEN_IN).balanceOf(
+            address(testCreditAccount)
+        );
+        uint256 caTokenOutBefore = IERC20(TOKEN_OUT).balanceOf(
+            address(testCreditAccount)
+        );
 
         bot.submitOrder(
             testCreditAccount,
@@ -121,8 +132,12 @@ contract TestBot is Test {
 
         uint256 ownerTokenInAfter = IERC20(TOKEN_IN).balanceOf(address(this));
         uint256 ownerTokenOutAfter = IERC20(TOKEN_OUT).balanceOf(address(this));
-        uint256 caTokenInAfter = IERC20(TOKEN_IN).balanceOf(address(testCreditAccount));
-        uint256 caTokenOutAfter = IERC20(TOKEN_OUT).balanceOf(address(testCreditAccount));
+        uint256 caTokenInAfter = IERC20(TOKEN_IN).balanceOf(
+            address(testCreditAccount)
+        );
+        uint256 caTokenOutAfter = IERC20(TOKEN_OUT).balanceOf(
+            address(testCreditAccount)
+        );
 
         assertEq(ownerTokenInBefore, INITIAL_BALANCE);
         assertEq(ownerTokenInAfter, INITIAL_BALANCE - TEST_AMOUNT);
@@ -140,21 +155,39 @@ contract TestBot is Test {
 
         bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
-        uint256 ownerTokenInAfterAfter = IERC20(TOKEN_IN).balanceOf(address(this));
-        uint256 ownerTokenOutAfterAfter = IERC20(TOKEN_OUT).balanceOf(address(this));
-        uint256 caTokenInAfterAfter = IERC20(TOKEN_IN).balanceOf(address(testCreditAccount));
-        uint256 caTokenOutAfterAfter = IERC20(TOKEN_OUT).balanceOf(address(testCreditAccount));
+        uint256 ownerTokenInAfterAfter = IERC20(TOKEN_IN).balanceOf(
+            address(this)
+        );
+        uint256 ownerTokenOutAfterAfter = IERC20(TOKEN_OUT).balanceOf(
+            address(this)
+        );
+        uint256 caTokenInAfterAfter = IERC20(TOKEN_IN).balanceOf(
+            address(testCreditAccount)
+        );
+        uint256 caTokenOutAfterAfter = IERC20(TOKEN_OUT).balanceOf(
+            address(testCreditAccount)
+        );
 
         assertEq(ownerTokenInAfterAfter, INITIAL_BALANCE - 2 * TEST_AMOUNT);
         assertEq(ownerTokenOutAfterAfter, 0);
         assertEq(caTokenInAfterAfter, 0);
         assertGt(caTokenOutAfterAfter, caTokenOutAfter);
 
-        Bot.UserOrder memory openUserOrder = bot.userOrders(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
+        Bot.UserOrder memory openUserOrder = bot.userOrders(
+            address(this),
+            testCreditAccount,
+            TOKEN_IN,
+            TOKEN_OUT
+        );
 
         bot.cancelOrder(testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
-        Bot.UserOrder memory closedUserOrder = bot.userOrders(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
+        Bot.UserOrder memory closedUserOrder = bot.userOrders(
+            address(this),
+            testCreditAccount,
+            TOKEN_IN,
+            TOKEN_OUT
+        );
 
         assertEq(openUserOrder.amount, TEST_AMOUNT);
         assertEq(openUserOrder.interval, FIVE_MINUTES);
@@ -178,7 +211,12 @@ contract TestBot is Test {
             tokenIn: TOKEN_IN,
             tokenOut: TOKEN_OUT,
             deadline: block.timestamp,
-            data: abi.encode(TEST_AMOUNT, FIVE_MINUTES, FIVE_PERCENT_SLIPPAGE, additionalConnector)
+            data: abi.encode(
+                TEST_AMOUNT,
+                FIVE_MINUTES,
+                FIVE_PERCENT_SLIPPAGE,
+                additionalConnector
+            )
         });
 
         bytes32 digest = bot.getTypedDataHash(permit);
@@ -188,16 +226,21 @@ contract TestBot is Test {
         vm.startPrank(RANDOM_ADDRESS);
         vm.deal(RANDOM_ADDRESS, 1 ether);
 
-        Bot.UserOrder memory userOrderBefore = bot.userOrders(wallet.addr, testCreditAccount, TOKEN_IN, TOKEN_OUT);
-
-        bot.submitOrderWithPermit(
-            permit,
-            v,
-            r,
-            s
+        Bot.UserOrder memory userOrderBefore = bot.userOrders(
+            wallet.addr,
+            testCreditAccount,
+            TOKEN_IN,
+            TOKEN_OUT
         );
 
-        Bot.UserOrder memory userOrderAfter = bot.userOrders(wallet.addr, testCreditAccount, TOKEN_IN, TOKEN_OUT);
+        bot.submitOrderWithPermit(permit, v, r, s);
+
+        Bot.UserOrder memory userOrderAfter = bot.userOrders(
+            wallet.addr,
+            testCreditAccount,
+            TOKEN_IN,
+            TOKEN_OUT
+        );
 
         assertEq(userOrderBefore.amount, 0);
         assertEq(userOrderAfter.amount, TEST_AMOUNT);
@@ -217,12 +260,7 @@ contract TestBot is Test {
         (v, r, s) = vm.sign(wallet.privateKey, digest);
 
         vm.expectRevert(Bot.PastDeadline.selector);
-        bot.cancelOrderWithPermit(
-            permit,
-            v,
-            r,
-            s
-        );
+        bot.cancelOrderWithPermit(permit, v, r, s);
 
         // address error cancel
         permit = SigUtils.Permit({
@@ -239,12 +277,7 @@ contract TestBot is Test {
         (v, r, s) = vm.sign(wallet.privateKey, digest);
 
         vm.expectRevert(Bot.InvalidSigner.selector);
-        bot.cancelOrderWithPermit(
-            permit,
-            v,
-            r,
-            s
-        );
+        bot.cancelOrderWithPermit(permit, v, r, s);
 
         // successful cancel
         permit = SigUtils.Permit({
@@ -260,16 +293,16 @@ contract TestBot is Test {
 
         (v, r, s) = vm.sign(wallet.privateKey, digest);
 
-        bot.cancelOrderWithPermit(
-            permit,
-            v,
-            r,
-            s
-        );
+        bot.cancelOrderWithPermit(permit, v, r, s);
 
         vm.stopPrank();
 
-        Bot.UserOrder memory userOrderAfterAfter = bot.userOrders(wallet.addr, testCreditAccount, TOKEN_IN, TOKEN_OUT);
+        Bot.UserOrder memory userOrderAfterAfter = bot.userOrders(
+            wallet.addr,
+            testCreditAccount,
+            TOKEN_IN,
+            TOKEN_OUT
+        );
 
         assertEq(userOrderAfterAfter.amount, 0);
     }
@@ -281,7 +314,12 @@ contract TestBot is Test {
             tokenIn: TOKEN_IN,
             tokenOut: TOKEN_OUT,
             deadline: block.timestamp - 1,
-            data: abi.encode(TEST_AMOUNT, FIVE_MINUTES, FIVE_PERCENT_SLIPPAGE, additionalConnector)
+            data: abi.encode(
+                TEST_AMOUNT,
+                FIVE_MINUTES,
+                FIVE_PERCENT_SLIPPAGE,
+                additionalConnector
+            )
         });
 
         bytes32 digest = bot.getTypedDataHash(permit);
@@ -292,12 +330,7 @@ contract TestBot is Test {
         vm.deal(RANDOM_ADDRESS, 1 ether);
 
         vm.expectRevert(Bot.PastDeadline.selector);
-        bot.submitOrderWithPermit(
-            permit,
-            v,
-            r,
-            s
-        );
+        bot.submitOrderWithPermit(permit, v, r, s);
 
         vm.stopPrank();
     }

@@ -10,6 +10,33 @@ import {SigUtils} from "./SigUtils.sol";
 contract Bot is SigUtils {
     using SafeERC20 for IERC20;
 
+    struct UserOrder {
+        uint256 amount; // Amount of tokenIn to transfer or swap
+        uint256 interval; // Time interval between successive executions (in seconds)
+        uint256 lastUpdated; // Timestamp of the last execution
+        uint256 slippage; // Acceptable slippage percentage for swap
+        address[] additionalConnectors; // Additional connectors for swap (in addition to default)
+    }
+
+    // Hardcoded Ethereum Mainnet addresses
+    IRouterV3 private constant ROUTER =
+        IRouterV3(0xA6FCd1fE716aD3801C71F2DE4E7A15f3a6994835);
+    ICreditFacadeV3 public constant CREDIT_FACADE =
+        ICreditFacadeV3(0x9Ab55e5c894238812295A31BdB415f00f7626792);
+
+    // payer => CreditAccount => tokenIn => tokenOut => UserOrder
+    mapping(address => mapping(address => mapping(address => mapping(address => UserOrder))))
+        private _userOrders;
+
+    // Hardcoded recommended connector addresses for RouterV3 as per GearBox documentation
+    // https://dev.gearbox.fi/system-contracts/router#findonetokenpath
+    address[] private _defaultConnectors = [
+        0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, // USDC
+        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2, // WETH
+        0xdAC17F958D2ee523a2206206994597C13D831ec7, // USDT
+        0x853d955aCEf822Db058eb8505911ED77F175b99e // FRAX
+    ];
+
     event OrderSubmitted(
         address indexed payer,
         address indexed creditAccount,
@@ -31,57 +58,22 @@ contract Bot is SigUtils {
         address tokenOut
     );
 
-    // Hardcoded Ethereum Mainnet addresses
-    IRouterV3 private constant ROUTER =
-        IRouterV3(0xA6FCd1fE716aD3801C71F2DE4E7A15f3a6994835);
-    ICreditFacadeV3 public constant CREDIT_FACADE =
-        ICreditFacadeV3(0x9Ab55e5c894238812295A31BdB415f00f7626792);
-
-    struct UserOrder {
-        uint256 amount; // Amount of tokenIn to transfer or swap
-        uint256 interval; // Time interval between successive executions (in seconds)
-        uint256 lastUpdated; // Timestamp of the last execution
-        uint256 slippage; // Acceptable slippage percentage for swap
-        address[] additionalConnectors; // Additional connectors for swap (in addition to default)
-    }
-
     error ExecutingTooEarly();
     error InsufficientAllowance();
     error OrderDoesNotExist();
     error PastDeadline();
     error InvalidSigner();
 
-    // payer => CreditAccount => tokenIn => tokenOut => UserOrder
-    mapping(address => mapping(address => mapping(address => mapping(address => UserOrder))))
-        private _userOrders;
-
-    // Hardcoded recommended connector addresses for RouterV3 as per GearBox documentation
-    // https://dev.gearbox.fi/system-contracts/router#findonetokenpath
-    address[] private _defaultConnectors = [
-        0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, // USDC
-        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2, // WETH
-        0xdAC17F958D2ee523a2206206994597C13D831ec7, // USDT
-        0x853d955aCEf822Db058eb8505911ED77F175b99e // FRAX
-    ];
-
     /**
-     * @dev Returns the user order details for a given credit account.
-     * @dev Implemented separately to return UserOrder struct instead of tuple.
-     * @param payer Address of the owner of the CreditAccount and payer of the swaps.
-     * @param creditAccount Address of the credit account to query.
-     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
-     * @param tokenOut Address of the token to receive after swap.
-     * @return UserOrder struct containing the order details.
+     * @notice Submits an order with a permit.
+     * @param permit The permit containing order details.
+     * @param v The recovery byte of the signature.
+     * @param r Half of the ECDSA signature pair.
+     * @param s Half of the ECDSA signature pair.
+     * @dev Decodes the permit data and submits an order if the permit is valid.
+     * @dev Reverts with `PastDeadline` if the permit deadline has passed.
+     * @dev Reverts with `InvalidSigner` if the recovered address is invalid or does not match the payer.
      */
-    function userOrders(
-        address payer,
-        address creditAccount,
-        address tokenIn,
-        address tokenOut
-    ) external view returns (UserOrder memory) {
-        return _userOrders[payer][creditAccount][tokenIn][tokenOut];
-    }
-
     function submitOrderWithPermit(
         Permit calldata permit,
         uint8 v,
@@ -114,6 +106,16 @@ contract Bot is SigUtils {
         );
     }
 
+    /**
+     * @notice Cancels an order with a permit.
+     * @param permit The permit containing order details.
+     * @param v The recovery byte of the signature.
+     * @param r Half of the ECDSA signature pair.
+     * @param s Half of the ECDSA signature pair.
+     * @dev Cancels an order if the permit is valid.
+     * @dev Reverts with `PastDeadline` if the permit deadline has passed.
+     * @dev Reverts with `InvalidSigner` if the recovered address is invalid or does not match the payer.
+     */
     function cancelOrderWithPermit(
         Permit calldata permit,
         uint8 v,
@@ -201,6 +203,24 @@ contract Bot is SigUtils {
         address tokenOut
     ) external {
         _executeOrder(payer, creditAccount, tokenIn, tokenOut);
+    }
+
+    /**
+     * @dev Returns the user order details for a given credit account.
+     * @dev Implemented separately to return UserOrder struct instead of tuple.
+     * @param payer Address of the owner of the CreditAccount and payer of the swaps.
+     * @param creditAccount Address of the credit account to query.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenOut Address of the token to receive after swap.
+     * @return UserOrder struct containing the order details.
+     */
+    function userOrders(
+        address payer,
+        address creditAccount,
+        address tokenIn,
+        address tokenOut
+    ) external view returns (UserOrder memory) {
+        return _userOrders[payer][creditAccount][tokenIn][tokenOut];
     }
 
     function _submitOrder(

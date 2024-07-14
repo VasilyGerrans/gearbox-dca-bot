@@ -1,0 +1,10 @@
+{
+  "extends": "solhint:default",
+  "rules": {
+    "ordering": "warn",
+    "func-visibility": ["warn", { "ignoreConstructors": true }],
+    "quotes": ["error", "double"],
+    "max-line-length": 126,
+    "no-console": "warn"
+  }
+}

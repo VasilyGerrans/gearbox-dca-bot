@@ -19,5 +19,8 @@
     "@gearbox-protocol/core-v3": "^1.49.7",
     "@gearbox-protocol/liquidator-v2-contracts": "^2.0.0",
     "@openzeppelin/contracts": "^5.0.2"
+  },
+  "devDependencies": {
+    "solhint": "^5.0.1"
   }
 }
