@@ -23,6 +23,7 @@ As described in test/Bot.s.sol, the flow is:
 4. Approve the bot the desired amount of tokenIn (for a long-term DCA strategy, it would make sense to make a max approve).
 5. Submit order directly to the Bot from the wallet which will pay into the DCA, or with permit as illustrated in test/Bot.s.sol.
 6. Setup call to script/ExecuteOrder.s.sol at regular intervals (CRON or something fancier), or setup Keepers/Gelato/etc. with equivalent logic.
+7. Once the user wants to actually withdraw the accumulated funds from the credit account, he should do so as described in the Gearbox docs: https://dev.gearbox.fi/credit/multicall/withdraw-collateral
 
 ## Notes
 * Once an order is submitted, anyone can execute it at the allotted intervals. The only way to prevent it from working is to cancel order or to set approve for the token to the bot back to 0.
