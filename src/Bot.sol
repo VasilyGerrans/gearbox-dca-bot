@@ -306,5 +306,7 @@ contract Bot is SigUtils {
         order.lastUpdated = block.timestamp;
 
         _userOrders[payer][creditAccount][tokenIn][tokenOut] = order;
+
+        emit OrderExecuted(payer, creditAccount, tokenIn, tokenOut);
     }
 }
