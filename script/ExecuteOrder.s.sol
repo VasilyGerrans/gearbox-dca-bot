@@ -10,18 +10,18 @@ import "../src/Bot.sol";
  *      broadcasting first, in order to not send transaction in cases where it will revert for some reason. 
  */
 contract ExecuteOrder is Script {
-    function run(Bot bot, address creditAccount, address tokenIn, address tokenOut) external {
+    function run(address bot, address creditAccount, address tokenIn, address tokenOut) external {
         vm.createSelectFork("mainnet");
 
         console.log("Checking if order execution reverts...");
 
-        bot.executeOrder(msg.sender, creditAccount, tokenIn, tokenOut);
+        Bot(bot).executeOrder(msg.sender, creditAccount, tokenIn, tokenOut);
 
         vm.startBroadcast();
 
         console.log("Executing order...");
 
-        bot.executeOrder(msg.sender, creditAccount, tokenIn, tokenOut);
+        Bot(bot).executeOrder(msg.sender, creditAccount, tokenIn, tokenOut);
 
         vm.stopBroadcast();
 
