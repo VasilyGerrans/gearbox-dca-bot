@@ -1,6 +1,10 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
+libs = ["lib", "node_modules"]
+evm_version = "shanghai"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[rpc_endpoints]
+mainnet = "https://mainnet.infura.io/v3/416304afa6a24e61934cad318b64884c"
