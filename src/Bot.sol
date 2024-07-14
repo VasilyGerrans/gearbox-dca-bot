@@ -1,12 +1,13 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
 import {ICreditFacadeV3} from "@gearbox-protocol/core-v3/contracts/interfaces/ICreditFacadeV3.sol";
 import {IRouterV3, RouterResult} from "@gearbox-protocol/liquidator-v2-contracts/contracts/interfaces/IRouterV3.sol";
 import {MultiCall} from "@gearbox-protocol/core-v2/contracts/libraries/MultiCall.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SigUtils} from "./SigUtils.sol";
 
-contract Bot {
+contract Bot is SigUtils {
     using SafeERC20 for IERC20;
 
     event OrderSubmitted(
@@ -16,14 +17,14 @@ contract Bot {
         address tokenOut
     );
 
-    event OrderExecuted(
+    event OrderCancelled(
         address indexed payer,
         address indexed creditAccount,
         address tokenIn,
         address tokenOut
     );
 
-    event OrderCancelled(
+    event OrderExecuted(
         address indexed payer,
         address indexed creditAccount,
         address tokenIn,
@@ -47,6 +48,8 @@ contract Bot {
     error ExecutingTooEarly();
     error InsufficientAllowance();
     error OrderDoesNotExist();
+    error PastDeadline();
+    error InvalidSigner();
 
     // payer => CreditAccount => tokenIn => tokenOut => UserOrder
     mapping(address => mapping(address => mapping(address => mapping(address => UserOrder))))
@@ -79,6 +82,59 @@ contract Bot {
         return _userOrders[payer][creditAccount][tokenIn][tokenOut];
     }
 
+    function submitOrderWithPermit(
+        Permit calldata permit,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        if (block.timestamp > permit.deadline) revert PastDeadline();
+
+        address recoveredAddress = _recoverAddress(permit, v, r, s);
+
+        if (recoveredAddress == address(0) || recoveredAddress != permit.payer)
+            revert InvalidSigner();
+
+        (
+            uint256 amount,
+            uint256 timeInterval,
+            uint256 slippage,
+            address[] memory additionalConnectors
+        ) = abi.decode(permit.data, (uint256, uint256, uint256, address[]));
+
+        _submitOrder(
+            permit.payer,
+            permit.creditAccount,
+            permit.tokenIn,
+            permit.tokenOut,
+            amount,
+            timeInterval,
+            slippage,
+            additionalConnectors
+        );
+    }
+
+    function cancelOrderWithPermit(
+        Permit calldata permit,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        if (block.timestamp > permit.deadline) revert PastDeadline();
+
+        address recoveredAddress = _recoverAddress(permit, v, r, s);
+
+        if (recoveredAddress == address(0) || recoveredAddress != permit.payer)
+            revert InvalidSigner();
+
+        _cancelOrder(
+            permit.payer,
+            permit.creditAccount,
+            permit.tokenIn,
+            permit.tokenOut
+        );
+    }
+
     /**
      * @dev Submits an order to the bot. If `begin` is true, executes the order immediately after submission.
      *      Can also be used to update information about an existing order.
@@ -91,7 +147,7 @@ contract Bot {
      * @param additionalConnectors Additional connectors to use for swap (in addition to default connectors).
      * @param begin Flag indicating whether to execute the order immediately after submission.
      */
-    function submitOrderToBot(
+    function submitOrder(
         address creditAccount,
         address tokenIn,
         address tokenOut,
@@ -101,7 +157,7 @@ contract Bot {
         address[] calldata additionalConnectors,
         bool begin
     ) external {
-        _submitOrderToBot(
+        _submitOrder(
             msg.sender,
             creditAccount,
             tokenIn,
@@ -147,7 +203,7 @@ contract Bot {
         _executeOrder(payer, creditAccount, tokenIn, tokenOut);
     }
 
-    function _submitOrderToBot(
+    function _submitOrder(
         address payer,
         address creditAccount,
         address tokenIn,
@@ -155,7 +211,7 @@ contract Bot {
         uint256 amount,
         uint256 timeInterval,
         uint256 slippage,
-        address[] calldata additionalConnectors
+        address[] memory additionalConnectors
     ) internal {
         UserOrder memory order = _userOrders[payer][creditAccount][tokenIn][
             tokenOut
@@ -209,16 +265,10 @@ contract Bot {
         if (order.amount == 0) revert OrderDoesNotExist();
         if (order.lastUpdated + order.interval > block.timestamp)
             revert ExecutingTooEarly();
-        if (
-            IERC20(tokenIn).allowance(payer, address(this)) <
-            order.amount
-        ) revert InsufficientAllowance();
+        if (IERC20(tokenIn).allowance(payer, address(this)) < order.amount)
+            revert InsufficientAllowance();
 
-        IERC20(tokenIn).safeTransferFrom(
-            payer,
-            creditAccount,
-            order.amount
-        );
+        IERC20(tokenIn).safeTransferFrom(payer, creditAccount, order.amount);
 
         RouterResult memory rResult = ROUTER.findOneTokenPath(
             tokenIn,

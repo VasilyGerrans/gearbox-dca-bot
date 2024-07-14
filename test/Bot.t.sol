@@ -1,13 +1,15 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {EXTERNAL_CALLS_PERMISSION} from "@gearbox-protocol/core-v3/contracts/interfaces/ICreditFacadeV3.sol";
 import {
     Bot, 
     ICreditFacadeV3, 
     MultiCall, 
-    IERC20
+    IERC20,
+    SigUtils
 } from "../src/Bot.sol";
 
 contract TestBot is Test {
@@ -23,12 +25,16 @@ contract TestBot is Test {
     uint256 memorisedTime;
     address testCreditAccount;
     address[] additionalConnector = [
-        0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599 // wbtc
+        0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599 // WBTC
     ];
 
     Bot bot;
 
+    VmSafe.Wallet wallet = vm.createWallet("testing_wallet");
+
     function setUp() public {
+        vm.addr(wallet.privateKey);
+
         vm.createSelectFork("mainnet");
 
         vm.startPrank(USDC_WHALE);
@@ -51,7 +57,7 @@ contract TestBot is Test {
     }
 
     function test_revertOrdersWithoutAllowance() public {
-        bot.submitOrderToBot(
+        bot.submitOrder(
             testCreditAccount,
             TOKEN_IN,
             TOKEN_OUT,
@@ -67,7 +73,7 @@ contract TestBot is Test {
     }
 
     function test_revertOrdersWithoutPermissions() public {
-        bot.submitOrderToBot(
+        bot.submitOrder(
             testCreditAccount,
             TOKEN_IN,
             TOKEN_OUT,
@@ -85,7 +91,7 @@ contract TestBot is Test {
         bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
     }
 
-    function test_submitOrderToBot() public {
+    function test_submitOrder() public {
         IERC20(TOKEN_IN).approve(address(bot), 3 * TEST_AMOUNT);
         assertEq(IERC20(TOKEN_IN).allowance(address(this), address(bot)), 3 * TEST_AMOUNT);
 
@@ -100,7 +106,7 @@ contract TestBot is Test {
         uint256 caTokenInBefore = IERC20(TOKEN_IN).balanceOf(address(testCreditAccount));
         uint256 caTokenOutBefore = IERC20(TOKEN_OUT).balanceOf(address(testCreditAccount));
 
-        bot.submitOrderToBot(
+        bot.submitOrder(
             testCreditAccount,
             TOKEN_IN,
             TOKEN_OUT,
@@ -144,11 +150,6 @@ contract TestBot is Test {
         assertEq(caTokenInAfterAfter, 0);
         assertGt(caTokenOutAfterAfter, caTokenOutAfter);
 
-        vm.startPrank(RANDOM_ADDRESS);
-        vm.deal(RANDOM_ADDRESS, 1 ether);
-
-        vm.stopPrank();
-
         Bot.UserOrder memory openUserOrder = bot.userOrders(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
         bot.cancelOrder(testCreditAccount, TOKEN_IN, TOKEN_OUT);
@@ -167,5 +168,137 @@ contract TestBot is Test {
 
         vm.expectRevert(Bot.OrderDoesNotExist.selector);
         bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
+    }
+
+    function test_submitAndCancelOrderWithPermit() public {
+        // successful submit
+        SigUtils.Permit memory permit = SigUtils.Permit({
+            payer: wallet.addr,
+            creditAccount: testCreditAccount,
+            tokenIn: TOKEN_IN,
+            tokenOut: TOKEN_OUT,
+            deadline: block.timestamp,
+            data: abi.encode(TEST_AMOUNT, FIVE_MINUTES, FIVE_PERCENT_SLIPPAGE, additionalConnector)
+        });
+
+        bytes32 digest = bot.getTypedDataHash(permit);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(wallet.privateKey, digest);
+
+        vm.startPrank(RANDOM_ADDRESS);
+        vm.deal(RANDOM_ADDRESS, 1 ether);
+
+        Bot.UserOrder memory userOrderBefore = bot.userOrders(wallet.addr, testCreditAccount, TOKEN_IN, TOKEN_OUT);
+
+        bot.submitOrderWithPermit(
+            permit,
+            v,
+            r,
+            s
+        );
+
+        Bot.UserOrder memory userOrderAfter = bot.userOrders(wallet.addr, testCreditAccount, TOKEN_IN, TOKEN_OUT);
+
+        assertEq(userOrderBefore.amount, 0);
+        assertEq(userOrderAfter.amount, TEST_AMOUNT);
+
+        // unsuccessful deadline cancel
+        permit = SigUtils.Permit({
+            payer: wallet.addr,
+            creditAccount: testCreditAccount,
+            tokenIn: TOKEN_IN,
+            tokenOut: TOKEN_OUT,
+            deadline: block.timestamp - 1,
+            data: "0x"
+        });
+
+        digest = bot.getTypedDataHash(permit);
+
+        (v, r, s) = vm.sign(wallet.privateKey, digest);
+
+        vm.expectRevert(Bot.PastDeadline.selector);
+        bot.cancelOrderWithPermit(
+            permit,
+            v,
+            r,
+            s
+        );
+
+        // address error cancel
+        permit = SigUtils.Permit({
+            payer: address(0),
+            creditAccount: testCreditAccount,
+            tokenIn: TOKEN_IN,
+            tokenOut: TOKEN_OUT,
+            deadline: block.timestamp,
+            data: "0x"
+        });
+
+        digest = bot.getTypedDataHash(permit);
+
+        (v, r, s) = vm.sign(wallet.privateKey, digest);
+
+        vm.expectRevert(Bot.InvalidSigner.selector);
+        bot.cancelOrderWithPermit(
+            permit,
+            v,
+            r,
+            s
+        );
+
+        // successful cancel
+        permit = SigUtils.Permit({
+            payer: wallet.addr,
+            creditAccount: testCreditAccount,
+            tokenIn: TOKEN_IN,
+            tokenOut: TOKEN_OUT,
+            deadline: block.timestamp,
+            data: "0x"
+        });
+
+        digest = bot.getTypedDataHash(permit);
+
+        (v, r, s) = vm.sign(wallet.privateKey, digest);
+
+        bot.cancelOrderWithPermit(
+            permit,
+            v,
+            r,
+            s
+        );
+
+        vm.stopPrank();
+
+        Bot.UserOrder memory userOrderAfterAfter = bot.userOrders(wallet.addr, testCreditAccount, TOKEN_IN, TOKEN_OUT);
+
+        assertEq(userOrderAfterAfter.amount, 0);
+    }
+
+    function test_revertSubmitOrderWithPermit() public {
+        SigUtils.Permit memory permit = SigUtils.Permit({
+            payer: wallet.addr,
+            creditAccount: testCreditAccount,
+            tokenIn: TOKEN_IN,
+            tokenOut: TOKEN_OUT,
+            deadline: block.timestamp - 1,
+            data: abi.encode(TEST_AMOUNT, FIVE_MINUTES, FIVE_PERCENT_SLIPPAGE, additionalConnector)
+        });
+
+        bytes32 digest = bot.getTypedDataHash(permit);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(wallet.privateKey, digest);
+
+        vm.startPrank(RANDOM_ADDRESS);
+        vm.deal(RANDOM_ADDRESS, 1 ether);
+
+        vm.expectRevert(Bot.PastDeadline.selector);
+        bot.submitOrderWithPermit(
+            permit,
+            v,
+            r,
+            s
+        );
+
+        vm.stopPrank();
     }
 }
