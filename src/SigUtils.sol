@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+/// @dev Implemented as a contract to allow dynamic DOMAIN_SEPARATOR.
 contract SigUtils {
     struct Permit {
         address payer;

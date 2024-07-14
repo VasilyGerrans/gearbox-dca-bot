@@ -6,9 +6,11 @@ import {IRouterV3, RouterResult} from "@gearbox-protocol/liquidator-v2-contracts
 import {MultiCall} from "@gearbox-protocol/core-v2/contracts/libraries/MultiCall.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SigUtils} from "./SigUtils.sol";
+import {ArrayConcat} from "./lib/ArrayConcat.sol";
 
 contract Bot is SigUtils {
     using SafeERC20 for IERC20;
+    using ArrayConcat for address[];
 
     struct UserOrder {
         uint256 amount; // Amount of tokenIn to transfer or swap
@@ -295,7 +297,7 @@ contract Bot is SigUtils {
             order.amount,
             tokenOut,
             creditAccount,
-            _concatArrays(_defaultConnectors, order.additionalConnectors),
+            _defaultConnectors.concat(order.additionalConnectors),
             order.slippage
         );
 
@@ -304,20 +306,5 @@ contract Bot is SigUtils {
         order.lastUpdated = block.timestamp;
 
         _userOrders[payer][creditAccount][tokenIn][tokenOut] = order;
-    }
-
-    function _concatArrays(
-        address[] memory array1,
-        address[] memory array2
-    ) internal pure returns (address[] memory array3) {
-        array3 = new address[](array1.length + array2.length);
-
-        for (uint256 i = 0; i < array1.length; i++) {
-            array3[i] = array1[i];
-        }
-
-        for (uint256 i = 0; i < array2.length; i++) {
-            array3[array1.length + i] = array2[i];
-        }
     }
 }
