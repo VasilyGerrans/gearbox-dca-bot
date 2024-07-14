@@ -17,7 +17,7 @@ contract TestBot is Test {
     uint256 constant INITIAL_BALANCE = 10 * TEST_AMOUNT;
     uint256 constant FIVE_MINUTES = 5 * 60;
     uint256 constant FIVE_PERCENT_SLIPPAGE = 500;
-    address constant TOkEN_OUT = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant TOKEN_OUT = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address constant TOKEN_IN = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
     uint256 memorisedTime;
@@ -47,14 +47,14 @@ contract TestBot is Test {
 
     function test_revertNonexistentOrders() public {
         vm.expectRevert(Bot.OrderDoesNotExist.selector);
-        bot.executeOrder(testCreditAccount);
+        bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
     }
 
     function test_revertOrdersWithoutAllowance() public {
         bot.submitOrderToBot(
             testCreditAccount,
             TOKEN_IN,
-            TOkEN_OUT,
+            TOKEN_OUT,
             TEST_AMOUNT,
             FIVE_MINUTES,
             FIVE_PERCENT_SLIPPAGE,
@@ -63,14 +63,14 @@ contract TestBot is Test {
         );
 
         vm.expectRevert(Bot.InsufficientAllowance.selector);
-        bot.executeOrder(testCreditAccount);
+        bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
     }
 
     function test_revertOrdersWithoutPermissions() public {
         bot.submitOrderToBot(
             testCreditAccount,
             TOKEN_IN,
-            TOkEN_OUT,
+            TOKEN_OUT,
             TEST_AMOUNT,
             FIVE_MINUTES,
             FIVE_PERCENT_SLIPPAGE,
@@ -82,7 +82,7 @@ contract TestBot is Test {
         assertEq(IERC20(TOKEN_IN).allowance(address(this), address(bot)), 3 * TEST_AMOUNT);
 
         vm.expectRevert();
-        bot.executeOrder(testCreditAccount);
+        bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
     }
 
     function test_submitOrderToBot() public {
@@ -96,14 +96,14 @@ contract TestBot is Test {
         );
 
         uint256 ownerTokenInBefore = IERC20(TOKEN_IN).balanceOf(address(this));
-        uint256 ownerTokenOutBefore = IERC20(TOkEN_OUT).balanceOf(address(this));
+        uint256 ownerTokenOutBefore = IERC20(TOKEN_OUT).balanceOf(address(this));
         uint256 caTokenInBefore = IERC20(TOKEN_IN).balanceOf(address(testCreditAccount));
-        uint256 caTokenOutBefore = IERC20(TOkEN_OUT).balanceOf(address(testCreditAccount));
+        uint256 caTokenOutBefore = IERC20(TOKEN_OUT).balanceOf(address(testCreditAccount));
 
         bot.submitOrderToBot(
             testCreditAccount,
             TOKEN_IN,
-            TOkEN_OUT,
+            TOKEN_OUT,
             TEST_AMOUNT,
             FIVE_MINUTES,
             FIVE_PERCENT_SLIPPAGE,
@@ -114,9 +114,9 @@ contract TestBot is Test {
         memorisedTime = block.timestamp;
 
         uint256 ownerTokenInAfter = IERC20(TOKEN_IN).balanceOf(address(this));
-        uint256 ownerTokenOutAfter = IERC20(TOkEN_OUT).balanceOf(address(this));
+        uint256 ownerTokenOutAfter = IERC20(TOKEN_OUT).balanceOf(address(this));
         uint256 caTokenInAfter = IERC20(TOKEN_IN).balanceOf(address(testCreditAccount));
-        uint256 caTokenOutAfter = IERC20(TOkEN_OUT).balanceOf(address(testCreditAccount));
+        uint256 caTokenOutAfter = IERC20(TOKEN_OUT).balanceOf(address(testCreditAccount));
 
         assertEq(ownerTokenInBefore, INITIAL_BALANCE);
         assertEq(ownerTokenInAfter, INITIAL_BALANCE - TEST_AMOUNT);
@@ -128,16 +128,16 @@ contract TestBot is Test {
         assertEq(caTokenInAfter, 0);
 
         vm.expectRevert(Bot.ExecutingTooEarly.selector);
-        bot.executeOrder(testCreditAccount);
+        bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
         vm.warp(memorisedTime + FIVE_MINUTES);
 
-        bot.executeOrder(testCreditAccount);
+        bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
         uint256 ownerTokenInAfterAfter = IERC20(TOKEN_IN).balanceOf(address(this));
-        uint256 ownerTokenOutAfterAfter = IERC20(TOkEN_OUT).balanceOf(address(this));
+        uint256 ownerTokenOutAfterAfter = IERC20(TOKEN_OUT).balanceOf(address(this));
         uint256 caTokenInAfterAfter = IERC20(TOKEN_IN).balanceOf(address(testCreditAccount));
-        uint256 caTokenOutAfterAfter = IERC20(TOkEN_OUT).balanceOf(address(testCreditAccount));
+        uint256 caTokenOutAfterAfter = IERC20(TOKEN_OUT).balanceOf(address(testCreditAccount));
 
         assertEq(ownerTokenInAfterAfter, INITIAL_BALANCE - 2 * TEST_AMOUNT);
         assertEq(ownerTokenOutAfterAfter, 0);
@@ -147,32 +147,25 @@ contract TestBot is Test {
         vm.startPrank(RANDOM_ADDRESS);
         vm.deal(RANDOM_ADDRESS, 1 ether);
 
-        vm.expectRevert(Bot.OnlyOrderPayer.selector);
-        bot.cancelOrder(testCreditAccount);
-
         vm.stopPrank();
 
-        Bot.UserOrder memory openUserOrder = bot.userOrders(testCreditAccount);
+        Bot.UserOrder memory openUserOrder = bot.userOrders(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
-        bot.cancelOrder(testCreditAccount);
+        bot.cancelOrder(testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
-        Bot.UserOrder memory closedUserOrder = bot.userOrders(testCreditAccount);
+        Bot.UserOrder memory closedUserOrder = bot.userOrders(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
 
-        assertEq(openUserOrder.payer, address(this));
-        assertEq(openUserOrder.tokenIn, TOKEN_IN);
-        assertEq(openUserOrder.tokenOut, TOkEN_OUT);
         assertEq(openUserOrder.amount, TEST_AMOUNT);
         assertEq(openUserOrder.interval, FIVE_MINUTES);
         assertEq(openUserOrder.slippage, 500);
+        assertEq(openUserOrder.additionalConnectors[0], additionalConnector[0]);
 
-        assertEq(closedUserOrder.payer, address(0));
-        assertEq(closedUserOrder.tokenIn, address(0));
-        assertEq(closedUserOrder.tokenOut, address(0));
         assertEq(closedUserOrder.amount, 0);
         assertEq(closedUserOrder.interval, 0);
         assertEq(closedUserOrder.slippage, 0);
+        assertEq(closedUserOrder.additionalConnectors.length, 0);
 
         vm.expectRevert(Bot.OrderDoesNotExist.selector);
-        bot.executeOrder(testCreditAccount);
+        bot.executeOrder(address(this), testCreditAccount, TOKEN_IN, TOKEN_OUT);
     }
 }

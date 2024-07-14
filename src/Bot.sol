@@ -6,11 +6,29 @@ import {IRouterV3, RouterResult} from "@gearbox-protocol/liquidator-v2-contracts
 import {MultiCall} from "@gearbox-protocol/core-v2/contracts/libraries/MultiCall.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-/**
- * @title Bot
- */
 contract Bot {
     using SafeERC20 for IERC20;
+
+    event OrderSubmitted(
+        address indexed payer,
+        address indexed creditAccount,
+        address tokenIn,
+        address tokenOut
+    );
+
+    event OrderExecuted(
+        address indexed payer,
+        address indexed creditAccount,
+        address tokenIn,
+        address tokenOut
+    );
+
+    event OrderCancelled(
+        address indexed payer,
+        address indexed creditAccount,
+        address tokenIn,
+        address tokenOut
+    );
 
     // Hardcoded Ethereum Mainnet addresses
     IRouterV3 private constant ROUTER =
@@ -19,9 +37,6 @@ contract Bot {
         ICreditFacadeV3(0x9Ab55e5c894238812295A31BdB415f00f7626792);
 
     struct UserOrder {
-        address payer; // Address initiating the order
-        address tokenIn; // Address of the token to transfer from payer to credit account
-        address tokenOut; // Address of the token to receive after swap
         uint256 amount; // Amount of tokenIn to transfer or swap
         uint256 interval; // Time interval between successive executions (in seconds)
         uint256 lastUpdated; // Timestamp of the last execution
@@ -32,9 +47,10 @@ contract Bot {
     error ExecutingTooEarly();
     error InsufficientAllowance();
     error OrderDoesNotExist();
-    error OnlyOrderPayer();
 
-    mapping(address => UserOrder) private _userOrders;
+    // payer => CreditAccount => tokenIn => tokenOut => UserOrder
+    mapping(address => mapping(address => mapping(address => mapping(address => UserOrder))))
+        private _userOrders;
 
     // Hardcoded recommended connector addresses for RouterV3 as per GearBox documentation
     // https://dev.gearbox.fi/system-contracts/router#findonetokenpath
@@ -48,17 +64,24 @@ contract Bot {
     /**
      * @dev Returns the user order details for a given credit account.
      * @dev Implemented separately to return UserOrder struct instead of tuple.
+     * @param payer Address of the owner of the CreditAccount and payer of the swaps.
      * @param creditAccount Address of the credit account to query.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenOut Address of the token to receive after swap.
      * @return UserOrder struct containing the order details.
      */
     function userOrders(
-        address creditAccount
+        address payer,
+        address creditAccount,
+        address tokenIn,
+        address tokenOut
     ) external view returns (UserOrder memory) {
-        return _userOrders[creditAccount];
+        return _userOrders[payer][creditAccount][tokenIn][tokenOut];
     }
 
     /**
      * @dev Submits an order to the bot. If `begin` is true, executes the order immediately after submission.
+     *      Can also be used to update information about an existing order.
      * @param creditAccount Address of the credit account to associate the order with.
      * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
      * @param tokenOut Address of the token to receive after swap.
@@ -88,15 +111,21 @@ contract Bot {
             slippage,
             additionalConnectors
         );
-        if (begin) _executeOrder(creditAccount);
+        if (begin) _executeOrder(msg.sender, creditAccount, tokenIn, tokenOut);
     }
 
     /**
      * @dev Cancels an existing order associated with the caller's credit account.
      * @param creditAccount Address of the credit account associated with the order to cancel.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenOut Address of the token to receive after swap.
      */
-    function cancelOrder(address creditAccount) external {
-        _cancelOrder(creditAccount);
+    function cancelOrder(
+        address creditAccount,
+        address tokenIn,
+        address tokenOut
+    ) external {
+        _cancelOrder(msg.sender, creditAccount, tokenIn, tokenOut);
     }
 
     /**
@@ -104,10 +133,18 @@ contract Bot {
      *      checks on slippage that will revert swaps that don't meet our criteria as per documentation
      *      https://dev.gearbox.fi/system-contracts/router#findonetokenpath. findOneTokenPath is invoked
      *      every time because the optimal path can change.
+     * @param payer Address of the owner of the CreditAccount and payer of the swaps.
      * @param creditAccount Address of the credit account associated with the order to execute.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenOut Address of the token to receive after swap.
      */
-    function executeOrder(address creditAccount) external {
-        _executeOrder(creditAccount);
+    function executeOrder(
+        address payer,
+        address creditAccount,
+        address tokenIn,
+        address tokenOut
+    ) external {
+        _executeOrder(payer, creditAccount, tokenIn, tokenOut);
     }
 
     function _submitOrderToBot(
@@ -120,29 +157,33 @@ contract Bot {
         uint256 slippage,
         address[] calldata additionalConnectors
     ) internal {
-        _userOrders[creditAccount] = UserOrder({
-            payer: payer,
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
+        UserOrder memory order = _userOrders[payer][creditAccount][tokenIn][
+            tokenOut
+        ];
+
+        _userOrders[payer][creditAccount][tokenIn][tokenOut] = UserOrder({
             amount: amount,
             interval: timeInterval,
-            lastUpdated: 0,
+            lastUpdated: order.lastUpdated,
             slippage: slippage,
             additionalConnectors: additionalConnectors
         });
+
+        emit OrderSubmitted(payer, creditAccount, tokenIn, tokenOut);
     }
 
-    function _cancelOrder(address creditAccount) internal {
-        UserOrder memory order = _userOrders[creditAccount];
-
-        if (msg.sender != order.payer) revert OnlyOrderPayer();
+    function _cancelOrder(
+        address payer,
+        address creditAccount,
+        address tokenIn,
+        address tokenOut
+    ) internal {
+        UserOrder memory order = _userOrders[payer][creditAccount][tokenIn][
+            tokenOut
+        ];
 
         address[] memory emptyConnectors;
-
         order = UserOrder({
-            payer: address(0),
-            tokenIn: address(0),
-            tokenOut: address(0),
             amount: 0,
             interval: 0,
             lastUpdated: 0,
@@ -150,30 +191,39 @@ contract Bot {
             additionalConnectors: emptyConnectors
         });
 
-        _userOrders[creditAccount] = order;
+        _userOrders[payer][creditAccount][tokenIn][tokenOut] = order;
+
+        emit OrderCancelled(payer, creditAccount, tokenIn, tokenOut);
     }
 
-    function _executeOrder(address creditAccount) internal {
-        UserOrder memory order = _userOrders[creditAccount];
+    function _executeOrder(
+        address payer,
+        address creditAccount,
+        address tokenIn,
+        address tokenOut
+    ) internal {
+        UserOrder memory order = _userOrders[payer][creditAccount][tokenIn][
+            tokenOut
+        ];
 
-        if (order.payer == address(0)) revert OrderDoesNotExist();
+        if (order.amount == 0) revert OrderDoesNotExist();
         if (order.lastUpdated + order.interval > block.timestamp)
             revert ExecutingTooEarly();
         if (
-            IERC20(order.tokenIn).allowance(order.payer, address(this)) <
+            IERC20(tokenIn).allowance(payer, address(this)) <
             order.amount
         ) revert InsufficientAllowance();
 
-        IERC20(order.tokenIn).safeTransferFrom(
-            order.payer,
+        IERC20(tokenIn).safeTransferFrom(
+            payer,
             creditAccount,
             order.amount
         );
 
         RouterResult memory rResult = ROUTER.findOneTokenPath(
-            order.tokenIn,
+            tokenIn,
             order.amount,
-            order.tokenOut,
+            tokenOut,
             creditAccount,
             _concatArrays(_defaultConnectors, order.additionalConnectors),
             order.slippage
@@ -183,7 +233,7 @@ contract Bot {
 
         order.lastUpdated = block.timestamp;
 
-        _userOrders[creditAccount] = order;
+        _userOrders[payer][creditAccount][tokenIn][tokenOut] = order;
     }
 
     function _concatArrays(
