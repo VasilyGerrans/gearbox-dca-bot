@@ -209,7 +209,7 @@ contract Bot is SigUtils {
 
     /**
      * @dev Returns the user order details for a given credit account.
-     * @dev Implemented separately to return UserOrder struct instead of tuple.
+     *      Implemented separately to return UserOrder struct instead of tuple.
      * @param payer Address of the payer of the swaps.
      * @param creditAccount Address of the credit account to query.
      * @param tokenIn Address of the token to transfer from the payer to the credit account and swap from.
