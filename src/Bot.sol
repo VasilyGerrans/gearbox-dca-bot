@@ -16,7 +16,7 @@ contract Bot is SigUtils {
         uint256 amount; // Amount of tokenIn to transfer or swap
         uint256 interval; // Time interval between successive executions (in seconds)
         uint256 lastUpdated; // Timestamp of the last execution
-        uint256 slippage; // Acceptable slippage percentage for swap
+        uint256 slippage; // Acceptable slippage percentage for swap (in bps)
         address[] additionalConnectors; // Additional connectors for swap (in addition to default)
     }
 
@@ -147,7 +147,7 @@ contract Bot is SigUtils {
      * @param tokenOut Address of the token to receive after swap.
      * @param amount Amount of `tokenIn` to transfer or swap.
      * @param timeInterval Time interval between successive executions (in seconds).
-     * @param slippage Acceptable slippage percentage for swap.
+     * @param slippage Acceptable slippage percentage for swap (in bps).
      * @param additionalConnectors Additional connectors to use for swap (in addition to default connectors).
      * @param begin Flag indicating whether to execute the order immediately after submission.
      */
