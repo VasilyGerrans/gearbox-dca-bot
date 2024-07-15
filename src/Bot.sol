@@ -193,7 +193,7 @@ contract Bot is SigUtils {
      *      checks on slippage that will revert swaps that don't meet our criteria as per documentation
      *      https://dev.gearbox.fi/system-contracts/router#findonetokenpath. findOneTokenPath is invoked
      *      every time because the optimal path can change.
-     * @param payer Address of the owner of the CreditAccount and payer of the swaps.
+     * @param payer Address of the payer of the swaps.
      * @param creditAccount Address of the credit account associated with the order to execute.
      * @param tokenIn Address of the token to transfer from the payer to the credit account and swap from.
      * @param tokenOut Address of the token to receive after swap.
@@ -210,7 +210,7 @@ contract Bot is SigUtils {
     /**
      * @dev Returns the user order details for a given credit account.
      * @dev Implemented separately to return UserOrder struct instead of tuple.
-     * @param payer Address of the owner of the CreditAccount and payer of the swaps.
+     * @param payer Address of the payer of the swaps.
      * @param creditAccount Address of the credit account to query.
      * @param tokenIn Address of the token to transfer from the payer to the credit account and swap from.
      * @param tokenOut Address of the token to receive after swap.
