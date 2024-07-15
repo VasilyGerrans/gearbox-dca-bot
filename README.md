@@ -6,6 +6,14 @@ After git cloning the repo, install npm dependencies
 npm i 
 ```
 After that, all regular forge commands will work. 
+To run test, run
+```
+forge test -vvv
+```
+To check test coverage, run
+```
+forge coverage
+```
 To deploy Bot, run
 ```
 forge script script/DeployBot.s.sol --rpc-url <YOUR_RPC_URL> --private-key <YOUR_PRIVATE_KEY> --broadcast
@@ -31,3 +39,4 @@ As described in test/Bot.s.sol, the flow is:
 * The bot is NOT designed to receive any ether or tokens.
 * This repo hardcodes Ethereum Mainnet addresses everywhere.
 * Existing orders can be edited by submitting a new order for the same credit account, token in and token out.
+* The test relies on borrowing USDC from Ethereum whale 0x4B16c5dE96EB2117bBE5fd171E4d203624B014aa. If the whale gets rid of his USDC, the test will fail until the whale address is replaced.
