@@ -143,7 +143,7 @@ contract Bot is SigUtils {
      * @dev Submits an order to the bot. If `begin` is true, executes the order immediately after submission.
      *      Can also be used to update information about an existing order.
      * @param creditAccount Address of the credit account to associate the order with.
-     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account and swap from.
      * @param tokenOut Address of the token to receive after swap.
      * @param amount Amount of `tokenIn` to transfer or swap.
      * @param timeInterval Time interval between successive executions (in seconds).
@@ -177,7 +177,7 @@ contract Bot is SigUtils {
     /**
      * @dev Cancels an existing order associated with the caller's credit account.
      * @param creditAccount Address of the credit account associated with the order to cancel.
-     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account and swap from.
      * @param tokenOut Address of the token to receive after swap.
      */
     function cancelOrder(
@@ -195,7 +195,7 @@ contract Bot is SigUtils {
      *      every time because the optimal path can change.
      * @param payer Address of the owner of the CreditAccount and payer of the swaps.
      * @param creditAccount Address of the credit account associated with the order to execute.
-     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account and swap from.
      * @param tokenOut Address of the token to receive after swap.
      */
     function executeOrder(
@@ -212,7 +212,7 @@ contract Bot is SigUtils {
      * @dev Implemented separately to return UserOrder struct instead of tuple.
      * @param payer Address of the owner of the CreditAccount and payer of the swaps.
      * @param creditAccount Address of the credit account to query.
-     * @param tokenIn Address of the token to transfer from the payer to the credit account or swap from.
+     * @param tokenIn Address of the token to transfer from the payer to the credit account and swap from.
      * @param tokenOut Address of the token to receive after swap.
      * @return UserOrder struct containing the order details.
      */
